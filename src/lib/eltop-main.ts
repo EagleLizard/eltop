@@ -4,13 +4,12 @@ import tk from 'terminal-kit';
 import { Logger } from '../util/logger';
 import { isNumber, isString } from '../util/validate-primitives';
 
+import { eltopApp } from './eltop-app/eltop-app';
+
 const logger = Logger.init();
 
 export async function eltopMain() {
-  let doRedraw: boolean;
   let term: tk.Terminal;
-
-  doRedraw = true;
 
   logger.log('!'.repeat(50));
   logger.log('start');
@@ -18,14 +17,12 @@ export async function eltopMain() {
 
   term = setupTermKit({
     onDestroy: termDestroyHandler,
-    onResize: termResizeHandler,
     onKey: handleKey,
   });
 
-  function termResizeHandler(opts: TkOnResizeCbParams) {
-    logger.log('onResize:');
-    logger.log(opts);
-  }
+  await eltopApp({
+    term,
+  });
 
   function handleKey(keyName: string, matches: string[]) {
     switch(keyName) {
@@ -70,7 +67,6 @@ export async function eltopMain() {
   }
 
   function $destroy(exitCode: number) {
-    doRedraw = false;
     term.hideCursor(false);
     term.styleReset();
     term.resetScrollingRegion();
@@ -84,14 +80,8 @@ type TkOnDestroyCbParams = {
   killCode: NodeJS.Signals | number;
 };
 
-type TkOnResizeCbParams = {
-  width: number;
-  height: number;
-};
-
 type SetupTkOpts = {
   onDestroy: (params: TkOnDestroyCbParams) => void;
-  onResize: (params: TkOnResizeCbParams) => void;
   onKey: (keyName: string, matches: string[]) => void;
 };
 
@@ -104,12 +94,6 @@ function setupTermKit(opts: SetupTkOpts): tk.Terminal {
   logger.log(`term width: ${term.width}`);
   logger.log(`term height: ${term.height}`);
 
-  term.on('resize', (width: number, height: number) => {
-    opts.onResize({
-      width,
-      height,
-    });
-  });
   term.on('key', (keyName: string, matches: string[]) => {
     opts.onKey(keyName, matches);
   });
