@@ -31,14 +31,14 @@ export class TkContainerElem extends TkElement {
   }
 
   draw() {
-    this.screenBuffer.put({
-      x: 1,
-      y: 1,
-      dx: 1,
-      dy: 0,
-      attr: {},
-      wrap: true,
-    }, 'container');
+    // this.screenBuffer.put({
+    //   x: 1,
+    //   y: 1,
+    //   dx: 1,
+    //   dy: 0,
+    //   attr: {},
+    //   wrap: true,
+    // }, 'container');
     this.screenBuffer.draw({
       delta: true,
     });

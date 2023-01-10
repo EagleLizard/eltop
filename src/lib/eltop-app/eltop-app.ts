@@ -53,6 +53,8 @@ export async function eltopApp(opts: EltopAppOpts) {
       height: screen.screenBuffer.height,
     });
 
+    
+
     screen.children.push(leftContainer);
     screen.children.push(rightContainer);
   }
