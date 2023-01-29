@@ -2,13 +2,21 @@
 import tk from 'terminal-kit';
 
 import { Logger } from '../../util/logger';
-import { TkElement } from '../element/tk-element';
 import { TkScreenElem } from '../element/tk-screen-elem';
 import { TkContainerElem } from '../element/tk-container-elem';
 import { TkCpuBarsElem } from '../element/tk-cpu-bars/tk-cpu-bars-elem';
-import { CpuMonitor, CpuSampleInfo } from '../monitor/cpu-monitor';
+import { CpuLoadSample, CpuMonitor, CpuSampleInfo } from '../monitor/cpu-monitor';
+import { sleep } from '../../util/sleep';
+import { Timer } from '../../util/timer';
 
 const logger = Logger.init();
+
+const DRAW_FPS = 12;
+
+// const DRAW_INTERVAL_MS = 150;
+const DRAW_INTERVAL_MS = Math.round(1000 / DRAW_FPS);
+const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS / 2);
+// const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS * 1.5);
 
 export type EltopAppOpts = {
   term: tk.Terminal,
@@ -16,7 +24,9 @@ export type EltopAppOpts = {
 
 export async function eltopApp(opts: EltopAppOpts) {
   let term: tk.Terminal, screen: TkScreenElem;
+  let cpuBarsElem: TkCpuBarsElem;
   let cpuMonitor: CpuMonitor;
+  let drawTimer: Timer, cpuMonitorSampleTimer: Timer;
 
   term = opts.term;
 
@@ -24,9 +34,23 @@ export async function eltopApp(opts: EltopAppOpts) {
 
   cpuMonitor = await CpuMonitor.init();
 
+  drawTimer = Timer.start();
+  cpuMonitorSampleTimer = Timer.start();
+
   $initElems();
 
-  $drawElems();
+  for(;;) {
+    let drawSleepMs: number;
+    drawTimer.reset();
+    if(cpuMonitorSampleTimer.currentMs() > CPU_MONITOR_SAMPLE_MS) {
+      cpuMonitorSampleTimer.reset();
+      await cpuMonitor.sample();
+    }
+    $drawElems();
+    drawSleepMs = Math.round(DRAW_INTERVAL_MS - drawTimer.currentMs());
+    await sleep(drawSleepMs);
+    // logger.log(`drawSleepMs: ${drawSleepMs}`);
+  }
 
   function termResizeHandler(width: number, height: number) {
     logger.log('onResize:');
@@ -40,7 +64,6 @@ export async function eltopApp(opts: EltopAppOpts) {
     let leftContainer: TkContainerElem,
       rightContainer: TkContainerElem
     ;
-    let cpuBarsElem: TkCpuBarsElem;
     screen = new TkScreenElem({
       dst: term,
     });
@@ -75,8 +98,45 @@ export async function eltopApp(opts: EltopAppOpts) {
 
   function $drawElems() {
     let cpuSampleMap: Record<number, CpuSampleInfo>;
-    cpuSampleMap = cpuMonitor.getSamples();
-    
+    let cpuBarVals: number[];
+    let nowMs: number, cpuLookbackMs: number, cpuMonitorStartMs: number;
+
+    nowMs = Date.now();
+    cpuLookbackMs = 375;
+    cpuMonitorStartMs = nowMs - cpuLookbackMs;
+
+    cpuSampleMap = cpuMonitor.getSamples(cpuMonitorStartMs);
+    cpuBarVals = getCpuBarVals(cpuSampleMap);
+    cpuBarsElem.setBarData(cpuBarVals);
+
     screen.render();
   }
+}
+
+function getCpuBarVals(cpuSampleMap: Record<number, CpuSampleInfo>): number[] {
+  let cpuSampleKeys: number[], cpuBarVals: number[];
+  cpuSampleKeys = Object.keys(cpuSampleMap).map(cpuSampleKey => +cpuSampleKey);
+  cpuSampleKeys.sort((a, b) => {
+    if(a > b) {
+      return 1;
+    } else if(a < b) {
+      return -1;
+    } else {
+      return 0;
+    }
+  });
+  cpuBarVals = cpuSampleKeys.map(cpuSampleKey => {
+    let currCpuLoadSamples: CpuLoadSample[];
+    let sum: number, avg: number;
+    /*
+      get the average of the current load values per cpu
+    */
+    currCpuLoadSamples = cpuSampleMap[cpuSampleKey].loadSamples;
+    sum = currCpuLoadSamples.reduce((acc, curr) => {
+      return acc + curr.load;
+    }, 0);
+    avg = sum / currCpuLoadSamples.length;
+    return avg;
+  });
+  return cpuBarVals;
 }

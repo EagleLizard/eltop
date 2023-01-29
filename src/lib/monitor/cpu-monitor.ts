@@ -1,5 +1,5 @@
 
-import si, { cpu } from 'systeminformation';
+import si from 'systeminformation';
 
 import { Logger } from '../../util/logger';
 import { sleep } from '../../util/sleep';
@@ -21,7 +21,15 @@ export class CpuMonitor {
     this.cpuSampleMap = {};
   }
 
-  addCpuLoadSamples(cpuLoadSamples: CpuLoadSample[]) {
+  async sample() {
+    let loadData: si.Systeminformation.CurrentLoadData;
+    let cpuSamples: CpuLoadSample[];
+    loadData = await si.currentLoad();
+    cpuSamples = getCpuSampleInfo(loadData);
+    this.insertCpuLoadSamples(cpuSamples);
+  }
+
+  insertCpuLoadSamples(cpuLoadSamples: CpuLoadSample[]) {
     for(let i = 0; i < cpuLoadSamples.length; ++i) {
       let currCpuLoadSample: CpuLoadSample;
       currCpuLoadSample = cpuLoadSamples[i];
@@ -78,7 +86,7 @@ export class CpuMonitor {
     cpuMonitor = new CpuMonitor();
 
     initialLoadData = await si.currentLoad().then((res) => {
-      logger.log(getCpuSampleInfo(res));
+      // logger.log(getCpuSampleInfo(res));
       return sleep(500).then(() => {
         return si.currentLoad();
       });
@@ -86,10 +94,10 @@ export class CpuMonitor {
 
     initialCpuSamples = getCpuSampleInfo(initialLoadData);
 
-    cpuMonitor.addCpuLoadSamples(initialCpuSamples);
-    Object.keys(cpuMonitor.cpuSampleMap).forEach(cpuSampleInfoKey => {
-      logger.log(cpuMonitor.cpuSampleMap[+cpuSampleInfoKey].loadSamples);
-    });
+    cpuMonitor.insertCpuLoadSamples(initialCpuSamples);
+    // Object.keys(cpuMonitor.cpuSampleMap).forEach(cpuSampleInfoKey => {
+    //   logger.log(cpuMonitor.cpuSampleMap[+cpuSampleInfoKey].loadSamples);
+    // });
 
     return cpuMonitor;
   }
