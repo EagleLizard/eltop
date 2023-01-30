@@ -8,6 +8,7 @@ import { TkCpuBarsElem } from '../element/tk-cpu-bars/tk-cpu-bars-elem';
 import { CpuLoadSample, CpuMonitor, CpuSampleInfo } from '../monitor/cpu-monitor';
 import { sleep } from '../../util/sleep';
 import { Timer } from '../../util/timer';
+import { getIntuitiveTimeString } from '../../util/print-util';
 
 const logger = Logger.init();
 
@@ -15,7 +16,13 @@ const DRAW_FPS = 12;
 
 // const DRAW_INTERVAL_MS = 150;
 const DRAW_INTERVAL_MS = Math.round(1000 / DRAW_FPS);
-const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS / 2);
+
+// const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS / 4);
+const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS / 1.5);
+// const CPU_MONITOR_SAMPLE_MS = 5;
+// const CPU_MONITOR_SAMPLE_MS = 1;
+// const CPU_MONITOR_SAMPLE_MS = 0;
+
 // const CPU_MONITOR_SAMPLE_MS = Math.round(DRAW_INTERVAL_MS * 1.5);
 
 export type EltopAppOpts = {
@@ -27,6 +34,10 @@ export async function eltopApp(opts: EltopAppOpts) {
   let cpuBarsElem: TkCpuBarsElem;
   let cpuMonitor: CpuMonitor;
   let drawTimer: Timer, cpuMonitorSampleTimer: Timer;
+  let printTimer: Timer, eltopAppTimer: Timer;
+
+  logger.log(`DRAW_INTERVAL_MS: ${DRAW_INTERVAL_MS}`);
+  logger.log(`CPU_MONITOR_SAMPLE_MS: ${CPU_MONITOR_SAMPLE_MS}`);
 
   term = opts.term;
 
@@ -36,20 +47,41 @@ export async function eltopApp(opts: EltopAppOpts) {
 
   drawTimer = Timer.start();
   cpuMonitorSampleTimer = Timer.start();
+  printTimer = Timer.start();
+  eltopAppTimer = Timer.start();
 
   $initElems();
 
+  (async () => {
+    for(;;) {
+      let sampleSleepMs: number, currCpuSampleMs: number;
+      currCpuSampleMs = cpuMonitorSampleTimer.currentMs();
+      await cpuMonitor.sample();
+      sampleSleepMs = Math.round(CPU_MONITOR_SAMPLE_MS - currCpuSampleMs);
+      await sleep(sampleSleepMs);
+      cpuMonitorSampleTimer.reset();
+    }
+  })();
+
   for(;;) {
     let drawSleepMs: number;
-    drawTimer.reset();
-    if(cpuMonitorSampleTimer.currentMs() > CPU_MONITOR_SAMPLE_MS) {
-      cpuMonitorSampleTimer.reset();
-      await cpuMonitor.sample();
+    if(printTimer.currentMs() >= 1000) {
+      printStats();
+      printTimer.reset();
     }
+    drawTimer.reset();
     $drawElems();
     drawSleepMs = Math.round(DRAW_INTERVAL_MS - drawTimer.currentMs());
     await sleep(drawSleepMs);
     // logger.log(`drawSleepMs: ${drawSleepMs}`);
+  }
+
+  function printStats() {
+    let eltopAppCurrMs: number;
+    eltopAppCurrMs = eltopAppTimer.currentMs();
+    logger.log('~'.repeat(40));
+    logger.log(`${getIntuitiveTimeString(eltopAppCurrMs)}`);
+    logger.log(`cpuSample count: ${cpuMonitor.getNumSamples().toLocaleString()}`);
   }
 
   function termResizeHandler(width: number, height: number) {
@@ -102,10 +134,13 @@ export async function eltopApp(opts: EltopAppOpts) {
     let nowMs: number, cpuLookbackMs: number, cpuMonitorStartMs: number;
 
     nowMs = Date.now();
-    cpuLookbackMs = 375;
+    // cpuLookbackMs = 375;
+    // cpuLookbackMs = 750;
+    cpuLookbackMs = 500;
     cpuMonitorStartMs = nowMs - cpuLookbackMs;
 
     cpuSampleMap = cpuMonitor.getSamples(cpuMonitorStartMs);
+    // logger.log(cpuSampleMap[0].loadSamples.length);
     cpuBarVals = getCpuBarVals(cpuSampleMap);
     cpuBarsElem.setBarData(cpuBarVals);
 

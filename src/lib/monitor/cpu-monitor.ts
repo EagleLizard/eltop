@@ -6,6 +6,11 @@ import { sleep } from '../../util/sleep';
 
 const logger = Logger.init();
 
+const MAX_CPU_LOAD_SAMPLES = 1e5;
+// const MAX_CPU_LOAD_SAMPLES = 1e4;
+
+const CPU_SAMPLE_PRUNE_MIN = 1e3;
+
 export type CpuLoadSample = {
   timestamp: number;
   load: number;
@@ -21,6 +26,10 @@ export class CpuMonitor {
     this.cpuSampleMap = {};
   }
 
+  getNumSamples(): number {
+    return this.cpuSampleMap['0'].loadSamples.length;
+  }
+
   async sample() {
     let loadData: si.Systeminformation.CurrentLoadData;
     let cpuSamples: CpuLoadSample[];
@@ -30,16 +39,26 @@ export class CpuMonitor {
   }
 
   insertCpuLoadSamples(cpuLoadSamples: CpuLoadSample[]) {
+    let pruneN: number;
     for(let i = 0; i < cpuLoadSamples.length; ++i) {
       let currCpuLoadSample: CpuLoadSample;
+      let currCpuSampleInfo: CpuSampleInfo;
       currCpuLoadSample = cpuLoadSamples[i];
       if(this.cpuSampleMap[i] === undefined) {
         this.cpuSampleMap[i] = {
           loadSamples: [],
         };
       }
+      currCpuSampleInfo = this.cpuSampleMap[i];
+      if(currCpuSampleInfo.loadSamples.length >= MAX_CPU_LOAD_SAMPLES) {
 
-      this.cpuSampleMap[i].loadSamples.push(currCpuLoadSample);
+        pruneN = Math.ceil(MAX_CPU_LOAD_SAMPLES / 32);
+        if(pruneN < CPU_SAMPLE_PRUNE_MIN) {
+          pruneN = CPU_SAMPLE_PRUNE_MIN;
+        }
+        currCpuSampleInfo.loadSamples.splice(0, pruneN);
+      }
+      currCpuSampleInfo.loadSamples.push(currCpuLoadSample);
     }
   }
 
